@@ -181,8 +181,8 @@ Description: {body}
 ## Changed Files (all)
 {list of ALL changed files in the PR}
 
-## Diff (.rst files only)
-{diff hunks for .rst files}
+## Diff (all changed files)
+{full diff}
 
 ## Guidelines
 

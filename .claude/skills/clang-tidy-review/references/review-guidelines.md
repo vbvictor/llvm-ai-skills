@@ -63,12 +63,6 @@ Following LLVM coding standards, single-statement bodies should not have curly b
 ### 2.6 Use `auto` only when type is explicit on the RHS
 Spell out the type explicitly unless it is already apparent from a cast, constructor, or similar.
 
-### 2.7 Left-qualified `const` (const before type)
-In clang-tidy, write `const ParmVarDecl *Lhs` rather than `ParmVarDecl const *Lhs`.
-
-### 2.8 Use `const` for unmodified variables
-Variables assigned once and never modified should be `const`.
-
 ### 2.9 Use `const` reference in range-based for loops
 When the loop variable is not modified, use `const auto &` or `const Type &`.
 
@@ -347,7 +341,7 @@ Error messages should start with a lowercase letter and not end with a period (u
 ## 5. Testing Requirements
 
 ### 5.1 Match full diagnostic messages in tests
-Don't use `{{.*}}` wildcards; spell out the whole warning to catch regressions.
+The first occurrence of each unique diagnostic in a test file must spell out the full warning text (to catch typos/regressions). Subsequent occurrences of the same diagnostic may be truncated if the full text exceeds 120 characters. Do not use `{{.*}}` wildcards.
 
 ### 5.2 Add both positive and negative tests
 Verify both cases that trigger warnings and cases that should not.
@@ -355,8 +349,8 @@ Verify both cases that trigger warnings and cases that should not.
 ### 5.3 Add comprehensive edge-case tests
 Cover templates (instantiation, specialization), macros, lambdas (captures, nesting), type aliases/typedefs, raw strings, nested/interacting constructs (lambdas inside functions, constexpr-if branches), forward declarations, overloaded operators, and other language features that could cause false positives or incorrect fixes.
 
-### 5.4 Use `-or-later` suffix for language standard specifications
-Use `-std=c++17-or-later` instead of `-std=c++17`.
+### 5.4 Use `-or-later` suffix and match the check's `isLanguageVersionSupported`
+Use `-std=c++17-or-later` instead of `-std=c++17`. The language standard in tests must match the check's `isLanguageVersionSupported()` override (or equivalent `LangOpts` guard). For example, if a check only requires `LangOpts.CPlusPlus`, tests should use `-std=c++98-or-later`. All supported language modes should be covered — use separate test files if tests cannot be written in a single file due to language standard differences.
 
 ### 5.5 Do not increase minimum language standard in existing tests
 Create a new test file for higher standards instead of bumping the existing one.
@@ -383,7 +377,7 @@ Silence is the default expectation; explicit no-warn comments are noise.
 Unmatched messages are treated as failures by default.
 
 ### 5.13 Add CHECK-FIXES alongside CHECK-MESSAGES when fix-its exist
-Both the diagnostic and the fixed output must be verified.
+Both the diagnostic and the fixed output must be verified. When a test case intentionally has no fix-it (e.g., side effects, condition variables), simply omit CHECK-FIXES — no explanatory comment is needed.
 
 ### 5.14 Write tests for all diagnostic notes, not just warnings
 If a check emits notes, they should be tested too.
@@ -443,7 +437,7 @@ Heading underline characters should be consistent with the existing document sty
 When flagging a pattern, explain the recommended alternative.
 
 ### 6.9 Provide before/after code examples
-Show both bad and good code patterns.
+Show both bad and good code patterns. The "after" examples should show the actual fix-it output from the check, not hand-written idealized code.
 
 ### 6.10 Options section comes last in check documentation
 Place options after examples and all other content.
@@ -493,7 +487,7 @@ Every non-trivial class should have a `///` doxygen comment block.
 Use `\p name` to refer to parameters in prose, `\param name` to document them, `\returns` for return values, and `\code ... \endcode` for code examples.
 
 ### 6.26 Every source file needs a header
-Every source file should have a header describing its basic purpose, including the license notice.
+Every source file should have a header describing its basic purpose, including the license notice. The modern preferred style omits the filename and `C++` mode line from the header comment (i.e., just the `//===---` delimiter, description, and license — no `//===--- Filename.cpp - description ---*- C++ -*-===//`).
 
 ### 6.27 Use `#if 0` for commented-out code
 Don't use C-style `/* */` comments to disable code blocks; use `#if 0` / `#endif`.
@@ -685,7 +679,7 @@ When a check cannot be perfectly accurate, better to miss some true positives th
 When behavior might not be universally desired, put it behind an option.
 
 ### 11.3 Expose options with safe defaults
-Default to the safest behavior for ordinary users.
+Default to the safest behavior for ordinary users. Do not flag `StringRef` usage in option storage (e.g., `std::vector<StringRef>` from `parseStringList`) as a dangling-reference risk — the option strings are owned by the check infrastructure and remain valid for the check's lifetime.
 
 ### 11.4 Prefer single multi-level option over multiple booleans
 Consolidate related booleans into an option with enumerated levels.
@@ -702,7 +696,7 @@ Provide check-specific profile data rather than overall benchmarks.
 ### 11.8 Leave FIXME comments for temporary workarounds
 
 ### 11.9 Add comments explaining non-obvious logic
-Regex patterns, magic values, cron schedules, and complex algorithms need inline explanation.
+Regex patterns, magic values, cron schedules, and complex algorithms need inline explanation. Do not request comments for well-known C++ patterns like `std::nullopt` vs `""` return value semantics, or other patterns obvious to experienced LLVM developers.
 
 ### 11.10 Use type aliases for complex types
 
