@@ -18,33 +18,41 @@ Read `references/bugfix-patterns.md` to load the taxonomy of root causes, fix st
 
 ## Step 1: Find an Issue to Fix
 
-Search GitHub for open clang-tidy false-positive issues:
+Search GitHub for open issues with **both** `clang-tidy` and `false-positive` labels:
 
 ```bash
-gh search issues --repo llvm/llvm-project --label "clang-tidy" --state open \
-  --sort updated --limit 30 -- "false positive" \
-  --json number,title,labels,updatedAt,url
+gh issue list -R llvm/llvm-project --label "clang-tidy" --label "false-positive" \
+  --state open --limit 50 --json number,title,updatedAt,url,assignees
 ```
 
-Also try broader searches:
-
-```bash
-gh search issues --repo llvm/llvm-project --state open --sort updated --limit 20 \
-  -- "clang-tidy false positive" --json number,title,url
-```
+If that yields too few results, also try the `clang-tidy` label alone and filter for FP-related titles:
 
 ```bash
-gh search issues --repo llvm/llvm-project --label "clang-tidy" --state open \
-  --sort updated --limit 20 -- "incorrect warning" \
-  --json number,title,url
+gh issue list -R llvm/llvm-project --label "clang-tidy" --state open \
+  --limit 50 --json number,title,updatedAt,url,assignees
 ```
+
+### Verify No One is Working on It
+
+For each candidate issue, **before selecting it**, check:
+
+1. **Not assigned**:
+```bash
+gh issue view <NUMBER> -R llvm/llvm-project --json assignees,labels
+```
+
+2. **No open PR already targets it** -- search for linked PRs:
+```bash
+gh pr list -R llvm/llvm-project --state open --search "<NUMBER>" --limit 5 --json number,title,url
+```
+Also look at the issue's timeline/comments for "I'm working on this" or linked PR references.
 
 ### Issue Selection Criteria
 
 From the results, pick ONE issue that:
 1. Has a clear reproducer (C++ code that triggers the false positive)
 2. Identifies a specific check name (e.g., `bugprone-*`, `readability-*`)
-3. Is NOT already assigned or has an open PR (check with `gh issue view <number> -R llvm/llvm-project`)
+3. Is **not assigned** and has **no open PR** targeting it
 4. Looks feasible based on the bugfix patterns (template handling, matcher exclusion, guard condition, etc.)
 5. Preferably has recent activity (updated in last 6 months)
 
@@ -54,7 +62,7 @@ Print which issue you selected and why.
 
 ## Step 2: Analyze the Issue
 
-Read the full issue:
+Read the full issue **including all comments**:
 
 ```bash
 gh issue view <NUMBER> -R llvm/llvm-project --json title,body,comments
@@ -65,6 +73,15 @@ Extract:
 - **Reproducer code**: the C++ snippet that triggers the false positive
 - **Expected behavior**: no warning (or different warning)
 - **Actual behavior**: incorrect warning emitted
+
+### Read the Discussion Carefully
+
+Pay close attention to comments from:
+- **The issue author** -- may have additional reproducers, clarifications, or narrowed-down root causes
+- **LLVM contributors** -- may have suggestions for fix approaches, point to related code, or mention caveats
+- **Anyone saying "I think the issue is..."** -- leading questions and hypotheses from experienced contributors are valuable hints
+
+Incorporate any suggestions or constraints from the discussion into your fix strategy.
 
 ## Step 3: Locate and Understand the Check
 
@@ -156,7 +173,23 @@ Add an entry in `clang-tools-extra/docs/ReleaseNotes.rst` under "Changes in exis
   positive when <description>.
 ```
 
-## Step 7: Build and Test
+## Step 7: Format, Build, and Test
+
+**Before building**, run `clang-format` on any check source files you changed (NOT test files -- tests have their own formatting conventions):
+
+```bash
+# Format only the check .cpp/.h files you modified
+git clang-format HEAD~1 -- clang-tools-extra/clang-tidy/<module>/<CheckName>Check.cpp \
+  clang-tools-extra/clang-tidy/<module>/<CheckName>Check.h
+```
+
+Or more precisely, to format only staged/changed source files (excluding tests):
+
+```bash
+git diff --name-only | grep 'clang-tidy/.*\.\(cpp\|h\)$' | grep -v '/test/' | xargs -r clang-format -i
+```
+
+Then build:
 
 ```bash
 # Build just clang-tidy (faster than full build)
