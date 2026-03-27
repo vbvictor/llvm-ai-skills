@@ -1,16 +1,16 @@
 ---
 name: fix-clang-tidy-fp
-description: Find and fix false positive bugs in clang-tidy checks. Picks an open GitHub issue, analyzes the root cause, implements the fix with tests and release notes, then creates a PR.
+description: Find and fix false positive bugs in clang-tidy checks. Picks an open GitHub issue, analyzes the root cause, writes tests, verifies they reproduce the bug, then implements the fix.
 allowed-tools: Bash, Read, Write, Edit, Grep, Glob, Agent, WebFetch, WebSearch
 ---
 
 # Fix Clang-Tidy False Positives
 
-You are an expert LLVM/clang-tidy contributor. Your job is to find an open false-positive issue, fix it, and open a PR -- all autonomously.
+You are an expert LLVM/clang-tidy contributor. Your job is to find an open false-positive issue, write tests that reproduce it, and implement a fix -- all autonomously.
+
+**CRITICAL: NEVER commit, push, create branches, or create PRs. NEVER run `git add`, `git commit`, `git push`, `git checkout -b`, `gh pr create`, or any similar git/gh commands that modify the repository state. Your job ends at writing code and verifying tests pass. The user will handle all git operations themselves.**
 
 ## Configuration
-
-- **Target remote**: `origin` (user's fork of llvm/llvm-project)
 
 ## Step 0: Read Reference Material
 
@@ -121,7 +121,42 @@ Use `clang -Xclang -ast-dump` to understand the AST structure of the reproducer:
 ./build/bin/clang -Xclang -ast-dump -fsyntax-only -std=c++20 /tmp/fp_repro.cpp 2>/dev/null | head -200
 ```
 
-## Step 5: Determine Root Cause and Fix Strategy
+## Step 5: Write Tests FIRST (Before the Fix)
+
+Write the test cases **before** modifying the check code. This ensures we can verify the bug reproduces.
+
+Append test cases to the existing test file. Include:
+
+1. **Regression test** (the false positive case -- should NOT warn after the fix):
+```cpp
+<reproducer code>
+```
+
+2. **Preservation test** (verify the check still catches real issues):
+```cpp
+<code that SHOULD trigger the warning>
+// CHECK-MESSAGES: :[[@LINE-1]]:N: warning: <full diagnostic>
+```
+
+If a new language standard is needed, create a new test file with the appropriate `-std=c++NN-or-later` flag.
+
+## Step 6: Verify Tests Fail on Unpatched Build
+
+Run the tests against the **current unpatched** clang-tidy to confirm they reproduce the bug:
+
+```bash
+# Build unpatched clang-tidy (only tests were modified, not the check)
+cmake --build build --target clang-tidy -j$(nproc)
+
+# Run the test -- it MUST FAIL (proving the false positive exists)
+python build/bin/llvm-lit -v clang-tools-extra/test/clang-tidy/checkers/<module>/<test-file>.cpp
+```
+
+**The test MUST fail here.** If it passes, your test cases don't actually reproduce the reported false positive. Go back to Step 5 and fix the tests.
+
+Only proceed once you've confirmed the test failure matches the reported issue (e.g., unexpected warning on the regression test case).
+
+## Step 7: Determine Root Cause and Fix Strategy
 
 Based on the analysis, classify the root cause (from `references/bugfix-patterns.md`):
 
@@ -132,7 +167,7 @@ Based on the analysis, classify the root cause (from `references/bugfix-patterns
 5. **Bad FixIt** -> Strategy 6 (use `tooling::fixit::*`)
 6. **Crash on input** -> Strategy 7 (fix input handling)
 
-## Step 6: Implement the Fix
+## Step 8: Implement the Fix
 
 ### Modify the check implementation
 
@@ -146,23 +181,6 @@ Common patterns:
 - Handle new AST node type in `check()` method
 - Add `isDependentType()` guard
 
-### Add tests
-
-Append test cases to the existing test file. Include:
-
-1. **Regression test** (the false positive case -- should NOT warn):
-```cpp
-<reproducer code>
-```
-
-2. **Preservation test** (verify the check still catches real issues):
-```cpp
-<code that SHOULD trigger the warning>
-// CHECK-MESSAGES: :[[@LINE-1]]:N: warning: <full diagnostic>
-```
-
-If a new language standard is needed, create a new test file with the appropriate `-std=c++NN-or-later` flag.
-
 ### Update release notes
 
 Add an entry in `clang-tools-extra/docs/ReleaseNotes.rst` under "Changes in existing checks", in alphabetical order:
@@ -173,29 +191,21 @@ Add an entry in `clang-tools-extra/docs/ReleaseNotes.rst` under "Changes in exis
   positive when <description>.
 ```
 
-## Step 7: Format, Build, and Test
+## Step 9: Format, Build, and Verify Fix
 
 **Before building**, run `clang-format` on any check source files you changed (NOT test files -- tests have their own formatting conventions):
-
-```bash
-# Format only the check .cpp/.h files you modified
-git clang-format HEAD~1 -- clang-tools-extra/clang-tidy/<module>/<CheckName>Check.cpp \
-  clang-tools-extra/clang-tidy/<module>/<CheckName>Check.h
-```
-
-Or more precisely, to format only staged/changed source files (excluding tests):
 
 ```bash
 git diff --name-only | grep 'clang-tidy/.*\.\(cpp\|h\)$' | grep -v '/test/' | xargs -r clang-format -i
 ```
 
-Then build:
+Then build and run tests:
 
 ```bash
-# Build just clang-tidy (faster than full build)
+# Build patched clang-tidy
 cmake --build build --target clang-tidy -j$(nproc)
 
-# Run the specific test
+# Run the test -- it MUST PASS now
 python build/bin/llvm-lit -v clang-tools-extra/test/clang-tidy/checkers/<module>/<test-file>.cpp
 
 # Verify the fix with the reproducer
@@ -207,7 +217,7 @@ If build/test fails, diagnose and fix. Common issues:
 - Incorrect CHECK-MESSAGES line numbers
 - Matcher syntax errors
 
-## Step 8: Report Results
+## Step 10: Report Results
 
 Print a summary:
 - Issue number and title
@@ -220,10 +230,12 @@ Print a summary:
 
 ## Important Rules
 
+- **NEVER touch git or GitHub**. No `git add`, `git commit`, `git push`, `git checkout -b`, `gh pr create`, or any commands that modify repository state. The user handles all git operations.
 - **Minimal changes only**. Don't refactor surrounding code, don't add comments to unchanged code, don't fix unrelated issues.
+- **Tests first, fix second**. Always write tests and verify they fail before implementing the fix.
 - **Always add tests**. A bugfix without a test is incomplete.
 - **Always update release notes**. Use "Improved ... by fixing a false positive when ..." format.
 - **False negatives > false positives**. When in doubt, prefer not warning over incorrectly warning.
 - **Match existing style**. Follow the conventions already used in the check file (Golden Rule).
 - **Don't break existing tests**. Run the full check test suite if possible.
-- **One issue per run**. Fix one issue, create one PR, then stop.
+- **One issue per run**. Fix one issue, then stop.
