@@ -87,8 +87,6 @@ Read existing tests to understand the check's expected behavior.
 Create a minimal reproducer file and run clang-tidy on it:
 
 ```bash
-cd /home/victor/repos/addon-llvm/llvm-project
-
 # Write the reproducer
 cat > /tmp/fp_repro.cpp << 'EOF'
 <reproducer code from the issue>
@@ -119,15 +117,6 @@ Based on the analysis, classify the root cause (from `references/bugfix-patterns
 
 ## Step 6: Implement the Fix
 
-Create a new branch:
-
-```bash
-cd /home/victor/repos/addon-llvm/llvm-project
-git checkout main
-git pull
-git checkout -b fix-<check-name>-fp-<short-description>
-```
-
 ### Modify the check implementation
 
 Apply the chosen fix strategy. Keep changes minimal -- typically 5-30 lines of check code.
@@ -146,14 +135,11 @@ Append test cases to the existing test file. Include:
 
 1. **Regression test** (the false positive case -- should NOT warn):
 ```cpp
-// Regression test for GH#<issue-number>
 <reproducer code>
-// No warning expected.
 ```
 
 2. **Preservation test** (verify the check still catches real issues):
 ```cpp
-// Ensure the check still works for non-template cases
 <code that SHOULD trigger the warning>
 // CHECK-MESSAGES: :[[@LINE-1]]:N: warning: <full diagnostic>
 ```
@@ -173,8 +159,6 @@ Add an entry in `clang-tools-extra/docs/ReleaseNotes.rst` under "Changes in exis
 ## Step 7: Build and Test
 
 ```bash
-cd /home/victor/repos/addon-llvm/llvm-project
-
 # Build just clang-tidy (faster than full build)
 cmake --build build --target clang-tidy -j$(nproc)
 
@@ -190,61 +174,13 @@ If build/test fails, diagnose and fix. Common issues:
 - Incorrect CHECK-MESSAGES line numbers
 - Matcher syntax errors
 
-## Step 8: Commit and Create PR
-
-```bash
-cd /home/victor/repos/addon-llvm/llvm-project
-
-git add clang-tools-extra/clang-tidy/<module>/<CheckName>Check.cpp
-git add clang-tools-extra/test/clang-tidy/checkers/<module>/<test-file>.cpp
-git add clang-tools-extra/docs/ReleaseNotes.rst
-
-git commit -m "[clang-tidy] Fix false positive in \`<check-name>\` <description>
-
-<Explanation of the root cause and fix>
-
-Fixes https://github.com/llvm/llvm-project/issues/<NUMBER>"
-```
-
-Push and create PR:
-
-```bash
-git push -u origin fix-<check-name>-fp-<short-description>
-
-gh pr create -R llvm/llvm-project \
-  --title "[clang-tidy] Fix false positive in \`<check-name>\` <description>" \
-  --body "$(cat <<'EOF'
-## Summary
-
-<1-3 sentences explaining the false positive and the fix>
-
-## Root Cause
-
-<Brief explanation of why the false positive occurred>
-
-## Fix
-
-<Brief explanation of the fix strategy applied>
-
-## Test Plan
-
-- Added regression test for the reported false positive (GH#<NUMBER>)
-- Verified existing tests still pass
-- Tested with the reproducer from the issue
-
-Fixes #<NUMBER>
-EOF
-)"
-```
-
-## Step 9: Report Results
+## Step 8: Report Results
 
 Print a summary:
 - Issue number and title
 - Root cause classification
 - Fix strategy applied
 - Files changed
-- PR URL
 - Any concerns or follow-up items
 
 ---

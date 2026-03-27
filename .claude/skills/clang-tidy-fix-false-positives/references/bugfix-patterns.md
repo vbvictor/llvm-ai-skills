@@ -153,7 +153,6 @@ void shouldWarn() {
 - Append new test cases to existing test files (don't create new files unless different language standard needed)
 - First occurrence of each diagnostic must spell out full text
 - Both positive (should warn) and negative (should not warn) test cases
-- Reference GitHub issues: `// GH#XXXXX` or `// Closes #XXXXX`
 - Use `-or-later` suffix for language standards
 - Include `CHECK-FIXES` when fix-its exist
 
