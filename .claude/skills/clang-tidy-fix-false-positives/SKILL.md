@@ -49,16 +49,24 @@ Also look at the issue's timeline/comments for "I'm working on this" or linked P
 
 ### Issue Selection Criteria
 
-From the results, pick ONE issue that:
-1. Has a clear reproducer (C++ code that triggers the false positive)
-2. Identifies a specific check name (e.g., `bugprone-*`, `readability-*`)
-3. Is **not assigned** and has **no open PR** targeting it
-4. Looks feasible based on the bugfix patterns (template handling, matcher exclusion, guard condition, etc.)
-5. Preferably has recent activity (updated in last 6 months)
+Filter for issues that:
+1. Have a clear reproducer (C++ code that triggers the false positive)
+2. Identify a specific check name (e.g., `bugprone-*`, `readability-*`)
+3. Are **not assigned** and have **no open PR** targeting them
+4. Look feasible based on the bugfix patterns (template handling, matcher exclusion, guard condition, etc.)
+5. Preferably have recent activity (updated in last 6 months)
 
 **Skip issues** that require deep dataflow analysis, cross-TU analysis, or fundamental redesign of a check.
 
-Print which issue you selected and why.
+### Present Candidates to the User
+
+**Do NOT pick an issue yourself.** Present **2-5 candidate issues** to the user with a brief summary of each:
+- Issue number and title
+- Check name
+- One-line description of the reported false positive
+- Your quick feasibility assessment (easy/medium/hard)
+
+**Then STOP and wait for the user to tell you which one to fix.**
 
 ## Step 2: Analyze the Issue
 
@@ -98,6 +106,21 @@ Read the full check implementation (`.cpp` and `.h`). Understand:
 4. What AST node types are handled
 
 Read existing tests to understand the check's expected behavior.
+
+### Check if Existing Options Already Cover This
+
+Before concluding this is a bug, check whether the check already has **configuration options** that address the reporter's scenario:
+
+1. Look at `storeOptions()` and `Options.get()`/`Options.getLocalOrGlobal()` calls in the check implementation
+2. Read the check's `.rst` documentation for documented options
+3. Check if enabling/disabling an existing option resolves the reported false positive
+
+**If an existing option already handles the case**, this is likely **by design**, not a bug. Report this to the user and suggest picking a different issue. Examples:
+- `IgnoreNonDeducedTemplateTypes` already exists for template-related FPs
+- `AllowedTypes` / `AllowedFunctions` patterns let users suppress specific cases
+- The check may intentionally warn on a pattern that looks wrong per the coding guideline
+
+Only proceed to fix if there is **no existing option** that addresses the false positive, or if the false positive occurs even with correct option configuration.
 
 ## Step 4: Reproduce and Diagnose
 
