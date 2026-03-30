@@ -114,7 +114,7 @@ This helps the user understand your filtering and catch any mistakes.
 
 ## Step 4: Write the Report File
 
-Save the full report as a markdown file at `/tmp/clang-tidy-fp-triage-YYYY-MM-DD.md` (using today's date).
+Save the full report as a markdown file at `clang-tidy-fp-triage-YYYY-MM-DD.md` in the current working directory (using today's date).
 
 The file should contain everything from Step 3 in proper markdown format:
 
