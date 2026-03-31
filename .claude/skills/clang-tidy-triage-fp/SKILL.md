@@ -114,7 +114,7 @@ This helps the user understand your filtering and catch any mistakes.
 
 ## Step 4: Write the Report File
 
-Save the full report as a markdown file at `clang-tidy-fp-triage-YYYY-MM-DD.md` in the current working directory (using today's date).
+Save the full report as a markdown file at `/tmp/clang-tidy-fp-triage-YYYY-MM-DD.md` (using today's date). Writing to `/tmp/` avoids dirtying the LLVM repo working tree for downstream batch-fix workflows.
 
 The file should contain everything from Step 3 in proper markdown format:
 
@@ -148,11 +148,17 @@ The file should contain everything from Step 3 in proper markdown format:
 ...
 ```
 
-Print the file path so the user can find it.
+After writing, copy the report to the current working directory so the user has it handy:
+
+```bash
+cp /tmp/clang-tidy-fp-triage-YYYY-MM-DD.md ./
+```
+
+Print both paths.
 
 ## Important Rules
 
-- **No repo modifications**. The only file you write is the `/tmp/` report. Do not run git commands that change state.
+- **No repo modifications**. Reports go to `/tmp/` first, then get copied to cwd. Do not run git commands that change state.
 - **Be thorough**. Read the actual check code for each candidate, don't guess from the title alone.
 - **Be honest about difficulty**. If something looks hard, say so. Don't inflate the list with dubious candidates.
 - **Parallelize**. Use Agent subagents to analyze multiple issues concurrently. This skill is research-heavy.

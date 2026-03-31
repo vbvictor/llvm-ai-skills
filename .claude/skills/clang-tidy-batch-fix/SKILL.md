@@ -22,10 +22,10 @@ Read `references/bugfix-patterns.md` for root cause taxonomy, fix strategies, te
 
 ## Step 1: Read the Triage File
 
-The user will provide a path to a triage markdown file (produced by `/triage-clang-tidy-fp`). If not provided, look for the most recent file matching `/tmp/clang-tidy-fp-triage-*.md`.
+The user will provide a path to a triage markdown file (produced by `/triage-clang-tidy-fp`). If not provided, look for the most recent one:
 
 ```bash
-ls -t clang-tidy-fp-triage-*.md 2>/dev/null | head -1
+ls -t /tmp/clang-tidy-fp-triage-*.md 2>/dev/null | head -1
 ```
 
 Parse the "Detailed Analysis" section to extract for each issue:
@@ -270,14 +270,17 @@ Repeat from 3.1 for the next issue. You are now back on `main` with a clean tree
 
 ## Step 4: Generate Final Report
 
-After all issues are processed, generate the report:
+After all issues are processed, generate the report to `/tmp/` then copy to the user's working directory:
 
 ```bash
 python3 <SKILLS_DIR>/scripts/report.py \
   --output /tmp/clang-tidy-batch-fix-report-$(date +%Y-%m-%d).md
+
+# Copy to user's working directory
+cp /tmp/clang-tidy-batch-fix-report-$(date +%Y-%m-%d).md ./
 ```
 
-Print the full report contents to the user and the file path.
+Print the full report contents to the user and both file paths.
 
 ---
 
