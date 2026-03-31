@@ -225,11 +225,8 @@ git diff --name-only | grep 'clang-tidy/.*\.\(cpp\|h\)$' | grep -v '/test/' | xa
 Then build and run tests:
 
 ```bash
-# Build patched clang-tidy
-cmake --build build --target clang-tidy -j$(nproc)
-
-# Run the test -- it MUST PASS now
-python build/bin/llvm-lit -v clang-tools-extra/test/clang-tidy/checkers/<module>/<test-file>.cpp
+# Build and run all tests
+ninja -C build check-clang-tools
 
 # Verify the fix with the reproducer
 ./build/bin/clang-tidy -checks='-*,<check-name>' /tmp/fp_repro.cpp -- -std=c++20

@@ -55,7 +55,7 @@ If the tree is dirty, **STOP and ask the user** to clean it up.
 
 For each issue from the triage file, execute this loop:
 
-### 3a. Start the Branch
+### 3.1 Start the Branch
 
 ```bash
 python3 <SKILLS_DIR>/scripts/branch_start.py <ISSUE_NUMBER> --repo-dir <LLVM_REPO>
@@ -63,69 +63,176 @@ python3 <SKILLS_DIR>/scripts/branch_start.py <ISSUE_NUMBER> --repo-dir <LLVM_REP
 
 This creates branch `fix-<ISSUE_NUMBER>` and switches to it.
 
-### 3b. Analyze the Issue
+### Step 3.2: Analyze the Issue
 
-Read the full issue including all comments:
+Read the full issue **including all comments**:
 
 ```bash
 gh issue view <NUMBER> -R llvm/llvm-project --json title,body,comments
 ```
 
-Pay close attention to discussion hints, contributor suggestions, and "I'm working on this" claims. If someone claimed it since triage, **skip this issue**.
+Extract:
+- **Check name**: e.g., `readability-non-const-parameter`
+- **Reproducer code**: the C++ snippet that triggers the false positive
+- **Expected behavior**: no warning (or different warning)
+- **Actual behavior**: incorrect warning emitted
 
-### 3c. Locate and Understand the Check
+### Read the Discussion Carefully
 
-Convert check name to file paths and read:
-- Source: `clang-tools-extra/clang-tidy/<module>/<CheckName>Check.cpp`
-- Header: `clang-tools-extra/clang-tidy/<module>/<CheckName>Check.h`
-- Test: `clang-tools-extra/test/clang-tidy/checkers/<module>/<check-name>.cpp`
+Pay close attention to comments from:
+- **The issue author** -- may have additional reproducers, clarifications, or narrowed-down root causes
+- **LLVM contributors** -- may have suggestions for fix approaches, point to related code, or mention caveats
+- **Anyone saying "I think the issue is..."** -- leading questions and hypotheses from experienced contributors are valuable hints
 
-### 3d. Check Existing Options
+Incorporate any suggestions or constraints from the discussion into your fix strategy.
 
-Before fixing, verify this is a real bug:
-- Look at `storeOptions()` and `Options.get()` in the check
-- Read the check's `.rst` documentation
-- If an existing option handles the case, **skip this issue**
+### Step 3.3: Locate and Understand the Check
 
-### 3e. Write Tests FIRST
+Convert check name (kebab-case) to file paths:
+- Check name `readability-non-const-parameter` -> module `readability`, class `NonConstParameter`
+- Source: `clang-tools-extra/clang-tidy/readability/NonConstParameterCheck.cpp`
+- Header: `clang-tools-extra/clang-tidy/readability/NonConstParameterCheck.h`
+- Test: `clang-tools-extra/test/clang-tidy/checkers/readability/non-const-parameter.cpp`
 
-Append test cases to the existing test file:
-1. **Regression test** (false positive case -- should NOT warn after fix)
-2. **Preservation test** (should still warn on real issues)
+Read the full check implementation (`.cpp` and `.h`). Understand:
+1. What matchers are registered in `registerMatchers()`
+2. What logic runs in `check()`
+3. What traversal kind is used (default `TK_AsIs` vs `TK_IgnoreUnlessSpelledInSource`)
+4. What AST node types are handled
 
-### 3f. Verify Tests Fail on Unpatched Build
+Read existing tests to understand the check's expected behavior.
+
+### Check if Existing Options Already Cover This
+
+Before concluding this is a bug, check whether the check already has **configuration options** that address the reporter's scenario:
+
+1. Look at `storeOptions()` and `Options.get()`/`Options.getLocalOrGlobal()` calls in the check implementation
+2. Read the check's `.rst` documentation for documented options
+3. Check if enabling/disabling an existing option resolves the reported false positive
+
+**If an existing option already handles the case**, this is likely **by design**, not a bug. Report this to the user and suggest picking a different issue. Examples:
+- `IgnoreNonDeducedTemplateTypes` already exists for template-related FPs
+- `AllowedTypes` / `AllowedFunctions` patterns let users suppress specific cases
+- The check may intentionally warn on a pattern that looks wrong per the coding guideline
+
+Only proceed to fix if there is **no existing option** that addresses the false positive, or if the false positive occurs even with correct option configuration.
+
+### Step 3.4: Reproduce and Diagnose
+
+Create a minimal reproducer file and run clang-tidy on it:
 
 ```bash
-cmake --build build --target clang-tidy -j$(nproc)
-python build/bin/llvm-lit -v <TEST_FILE>
+# Write the reproducer
+cat > /tmp/fp_repro.cpp << 'EOF'
+<reproducer code from the issue>
+EOF
+
+# Run clang-tidy
+./build/bin/clang-tidy -checks='-*,<check-name>' /tmp/fp_repro.cpp -- -std=c++20
 ```
 
-**The test MUST fail here.** If it passes, the tests don't reproduce the bug -- fix them or skip.
+If no build directory exists, skip this step and work from code analysis alone.
 
-### 3g. Implement the Fix
+Use `clang -Xclang -ast-dump` to understand the AST structure of the reproducer:
 
-Apply the fix strategy. Keep changes minimal (5-30 lines typically).
+```bash
+./build/bin/clang -Xclang -ast-dump -fsyntax-only -std=c++20 /tmp/fp_repro.cpp 2>/dev/null | head -200
+```
 
-Update release notes in `clang-tools-extra/docs/ReleaseNotes.rst`.
+### Step 3.5: Write Tests FIRST (Before the Fix)
 
-### 3h. Format Source Files
+Write the test cases **before** modifying the check code. This ensures we can verify the bug reproduces.
 
-Run `clang-format` on check source files only (NOT tests):
+Append test cases to the existing test file. Include:
+
+1. **Regression test** (the false positive case -- should NOT warn after the fix):
+```cpp
+<reproducer code>
+```
+
+2. **Preservation test** (verify the check still catches real issues):
+```cpp
+<code that SHOULD trigger the warning>
+// CHECK-MESSAGES: :[[@LINE-1]]:N: warning: <full diagnostic>
+```
+
+If a new language standard is needed, create a new test file with the appropriate `-std=c++NN-or-later` flag.
+
+### Step 3.6: Verify Tests Fail on Unpatched Build
+
+Run the tests against the **current unpatched** clang-tidy to confirm they reproduce the bug:
+
+```bash
+# Build unpatched clang-tidy (only tests were modified, not the check)
+cmake --build build --target clang-tidy -j$(nproc)
+
+# Run the test -- it MUST FAIL (proving the false positive exists)
+python build/bin/llvm-lit -v clang-tools-extra/test/clang-tidy/checkers/<module>/<test-file>.cpp
+```
+
+**The test MUST fail here.** If it passes, your test cases don't actually reproduce the reported false positive. Go back to Step 5 and fix the tests.
+
+Only proceed once you've confirmed the test failure matches the reported issue (e.g., unexpected warning on the regression test case).
+
+### Step 3.7: Determine Root Cause and Fix Strategy
+
+Based on the analysis, classify the root cause (from `references/bugfix-patterns.md`):
+
+1. **Template/dependent context** -> Strategy 1 (add `unless(...)`) or Strategy 2 (`TK_IgnoreUnlessSpelledInSource`)
+2. **Macro expansion** -> Strategy 5 (rewrite with raw lexer)
+3. **Missing AST node handling** -> Strategy 4 (handle new node types)
+4. **Incomplete type/forward decl** -> Strategy 3 (add guard)
+5. **Bad FixIt** -> Strategy 6 (use `tooling::fixit::*`)
+6. **Crash on input** -> Strategy 7 (fix input handling)
+
+### Step 3.8: Implement the Fix
+
+### Modify the check implementation
+
+Apply the chosen fix strategy. Keep changes minimal -- typically 5-30 lines of check code.
+
+Common patterns:
+- Add `unless(isInstantiationDependent())` to matcher
+- Add `unless(isInTemplateInstantiation())` to matcher
+- Override `getCheckTraversalKind()` to return `TK_IgnoreUnlessSpelledInSource`
+- Add null/definition guard: `if (!Record->getDefinition()) return;`
+- Handle new AST node type in `check()` method
+- Add `isDependentType()` guard
+
+### Update release notes
+
+Add an entry in `clang-tools-extra/docs/ReleaseNotes.rst` under "Changes in existing checks", in alphabetical order:
+
+```rst
+- Improved :doc:`<check-name>
+  <clang-tidy/checks/<module>/<check-name>>` check by fixing a false
+  positive when <description>.
+```
+
+### Step 3.9: Format, Build, and Verify Fix
+
+**Before building**, run `clang-format` on any check source files you changed (NOT test files -- tests have their own formatting conventions):
 
 ```bash
 git diff --name-only | grep 'clang-tidy/.*\.\(cpp\|h\)$' | grep -v '/test/' | xargs -r clang-format -i
 ```
 
-### 3i. Build and Verify Fix
+Then build and run tests:
 
 ```bash
-cmake --build build --target clang-tidy -j$(nproc)
-python build/bin/llvm-lit -v <TEST_FILE>
+# Build and run all tests
+ninja -C build check-clang-tools
+
+# Verify the fix with the reproducer
+./build/bin/clang-tidy -checks='-*,<check-name>' /tmp/fp_repro.cpp -- -std=c++20
 ```
 
-**The test MUST pass now.**
+If build/test fails, diagnose and fix. Common issues:
+- Missing includes in test file
+- Incorrect CHECK-MESSAGES line numbers
+- Matcher syntax errors
 
-### 3j. Finish the Branch
+### Step 3.10. Finish the Branch
 
 On **success**:
 ```bash
@@ -157,9 +264,9 @@ python3 <SKILLS_DIR>/scripts/branch_finish.py <ISSUE_NUMBER> \
 
 The script commits (on success), switches back to `main`, and logs to the tracker.
 
-### 3k. Proceed to Next Issue
+### Step 3.11. Proceed to Next Issue
 
-Repeat from 3a for the next issue. You are now back on `main` with a clean tree.
+Repeat from 3.1 for the next issue. You are now back on `main` with a clean tree.
 
 ## Step 4: Generate Final Report
 
