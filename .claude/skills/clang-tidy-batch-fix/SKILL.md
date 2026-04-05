@@ -10,6 +10,8 @@ You are an expert LLVM/clang-tidy contributor. Your job is to read a triage repo
 
 **CRITICAL: NEVER push, merge, or create PRs. NEVER run `git push`, `git merge`, `gh pr create`. You ONLY create local branches via the helper scripts.**
 
+**CRITICAL: NEVER RUN AGENTS IN PARALLEL. Process issues STRICTLY ONE BY ONE, sequentially. Do not spawn multiple sub-agents to work on different issues at the same time. Finish one issue completely (including returning to `main` via `branch_finish.py`) before starting the next.**
+
 ## Configuration
 
 - **LLVM repo**: The user will provide or it defaults to `/home/victor/repos/addon-llvm/llvm-project`
@@ -286,6 +288,7 @@ Print the full report contents to the user and both file paths.
 
 ## Important Rules
 
+- **Never run agents in parallel.** Process issues strictly one by one, sequentially. Do not spawn sub-agents to work on multiple issues concurrently.
 - **One branch per issue**. Branch name is always `fix-<issue_number>`.
 - **Always return to main**. Never start a new fix while on a fix branch.
 - **Use the scripts**. Always use `branch_start.py` and `branch_finish.py` -- never run raw git branch/checkout/commit commands yourself.
