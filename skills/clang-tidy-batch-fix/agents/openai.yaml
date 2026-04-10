@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clang-Tidy Batch Fix"
+  short_description: "Fix triaged clang-tidy false positives"
+  default_prompt: "Read a clang-tidy false-positive triage report and fix each issue one by one, creating one local branch per successful fix."

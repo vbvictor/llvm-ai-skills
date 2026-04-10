@@ -52,7 +52,7 @@ Notes:
 
 ## Step 4: Launch 4 Review Agents in Parallel
 
-Use the Agent tool with `subagent_type="general-purpose"` to launch ALL 4 agents in a SINGLE message (parallel execution). Each agent receives its prompt with all context inline.
+Use the runtime's delegation/subagent mechanism (for example Claude `Agent` or Codex `spawn_agent`) to launch ALL 4 agents in a SINGLE message (parallel execution). Each agent receives its prompt with all context inline.
 
 **CRITICAL**: Pass the diff content and guideline text INLINE in each agent's prompt. Do NOT tell agents to read files -- they may not have access to the same working directory.
 
@@ -371,7 +371,7 @@ Bad example (do NOT do this):
 
 ### Writing and posting the JSON
 
-Use the Write tool to create `/tmp/pr_PR_NUMBER_review.json` with this structure (do NOT include `commit_id` or `event` — the post script handles those):
+Create `/tmp/pr_PR_NUMBER_review.json` with this structure (do NOT include `commit_id` or `event` — the post script handles those):
 
 ```json
 {

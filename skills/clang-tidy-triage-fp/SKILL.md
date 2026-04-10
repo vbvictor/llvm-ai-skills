@@ -32,7 +32,7 @@ From both searches, build a deduplicated list of candidates whose titles suggest
 
 ## Step 2: Deep-Analyze Each Candidate
 
-For each candidate (aim for 15-25 to ensure you end up with 10 good ones), run this analysis **in parallel using Agent subagents** where possible:
+For each candidate (aim for 15-25 to ensure you end up with 10 good ones), run this analysis **in parallel using the runtime's delegation/subagent mechanism** where possible (for example Claude `Agent` or Codex `spawn_agent`):
 
 ### 2a. Read the Full Issue
 
@@ -161,5 +161,5 @@ Print both paths.
 - **No repo modifications**. Reports go to `/tmp/` first, then get copied to cwd. Do not run git commands that change state.
 - **Be thorough**. Read the actual check code for each candidate, don't guess from the title alone.
 - **Be honest about difficulty**. If something looks hard, say so. Don't inflate the list with dubious candidates.
-- **Parallelize**. Use Agent subagents to analyze multiple issues concurrently. This skill is research-heavy.
+- **Parallelize**. Use the runtime's delegation/subagent mechanism to analyze multiple issues concurrently. This skill is research-heavy.
 - **Check options first**. The #1 mistake is treating "by design" behavior as a bug.
