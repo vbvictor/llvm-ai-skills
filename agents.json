@@ -1,0 +1,18 @@
+{
+  "agents": {
+    "claude": {
+      "display_name": "Claude",
+      "home_env": "CLAUDE_HOME",
+      "default_home": "~/.claude",
+      "skills_subdir": "skills",
+      "enabled": true
+    },
+    "codex": {
+      "display_name": "Codex",
+      "home_env": "CODEX_HOME",
+      "default_home": "~/.codex",
+      "skills_subdir": "skills",
+      "enabled": true
+    }
+  }
+}

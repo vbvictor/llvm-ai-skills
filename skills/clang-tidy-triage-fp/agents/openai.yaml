@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clang-Tidy FP Triage"
+  short_description: "Triage clang-tidy false positives"
+  default_prompt: "Search open LLVM clang-tidy false-positive issues, deeply analyze candidates, and produce a report of 10 fixable issues."

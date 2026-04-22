@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clang-Tidy Review"
+  short_description: "Review clang-tidy PRs"
+  default_prompt: "Review a clang-tidy pull request against LLVM coding, testing, documentation, and checker-design guidelines."

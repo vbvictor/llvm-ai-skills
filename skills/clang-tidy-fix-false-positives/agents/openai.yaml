@@ -1,0 +1,4 @@
+interface:
+  display_name: "Fix Clang-Tidy FP"
+  short_description: "Fix one clang-tidy false positive"
+  default_prompt: "Find a suitable open clang-tidy false-positive issue, present candidate issues, then fix the selected issue with tests and verification."
