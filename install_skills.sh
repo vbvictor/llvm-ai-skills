@@ -33,5 +33,5 @@ for skill_dir in "$LOCAL_SKILLS"/*/; do
     ln -s "$skill_dir" "$target"
 done
 
-echo "Done. Installed skills:"
+echo "Done. All skills in $GLOBAL_SKILLS (may include skills from other sources):"
 ls -l "$GLOBAL_SKILLS"/
