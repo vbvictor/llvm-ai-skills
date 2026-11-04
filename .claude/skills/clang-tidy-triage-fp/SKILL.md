@@ -12,7 +12,11 @@ You are an expert LLVM/clang-tidy contributor. Your job is to search for open fa
 
 ## Step 0: Read Reference Material
 
-Read `references/bugfix-patterns.md` to load the taxonomy of root causes, fix strategies, and file organization. You need this to assess feasibility.
+`<SHARED_DIR>` is the `_shared` directory next to this skill's directory (`<this skill's directory>/../_shared`).
+
+Read `<SHARED_DIR>/references/bugfix-patterns.md` to load the taxonomy of root causes, fix strategies, and file organization. You need this to assess feasibility.
+
+Read `<SHARED_DIR>/references/triage-agent-reports.md` to learn how to use the triage-agent's reports and how far to trust them.
 
 ## Step 1: Gather Candidate Issues
 
@@ -28,22 +32,32 @@ gh issue list -R llvm/llvm-project --label "clang-tidy" --state open \
   --limit 80 --json number,title,updatedAt,url,assignees
 ```
 
-From both searches, build a deduplicated list of candidates whose titles suggest false positives, incorrect warnings, or spurious diagnostics.
+Also list the triage-agent's reports. This finds issues the searches above miss, because the bot tags issues that have no `false-positive` label upstream:
+
+```bash
+python3 <SHARED_DIR>/scripts/triage_reports.py list
+```
+
+From all three sources, build a deduplicated list of candidates whose titles suggest false positives, incorrect warnings, or spurious diagnostics. Favor issues with a `Reproduced` report, since they already have a working reproducer.
 
 ## Step 2: Deep-Analyze Each Candidate
 
-For each candidate (aim for 15-25 to ensure you end up with 10 good ones), run this analysis **in parallel using Agent subagents** where possible:
+For each candidate (aim for 15-25 to ensure you end up with 10 good ones), run this analysis **in parallel using Agent subagents** where possible. Give each subagent the absolute path of `<SHARED_DIR>`, because it cannot resolve that on its own:
 
 ### 2a. Read the Full Issue
 
 ```bash
 gh issue view <NUMBER> -R llvm/llvm-project --json title,body,comments,assignees,labels
+python3 <SHARED_DIR>/scripts/triage_reports.py show <NUMBER>
 ```
 
 Extract:
 - **Check name** (e.g., `bugprone-*`, `readability-*`)
-- **Reproducer code** -- must exist and be clear
+- **Reproducer code** -- must exist and be clear. The Godbolt source in a triage-agent report counts
 - **Discussion hints** -- any suggestions from contributors, root cause theories, or "I'm working on this" claims
+- **Triage-agent report** -- verdict, Godbolt link, flags, Rationale and Similar Issues, if a report exists
+
+**Disqualify** if the report's verdict rules the issue out, per the table in `<SHARED_DIR>/references/triage-agent-reports.md`.
 
 ### 2b. Verify No One is Working on It
 
@@ -66,7 +80,7 @@ Read the check's implementation (`.cpp` and `.h`) and documentation (`.rst`):
 
 ### 2d. Classify Root Cause and Fix Strategy
 
-Based on the reproducer and the check code, classify using the taxonomy from `references/bugfix-patterns.md`:
+Based on the reproducer and the check code, classify using the taxonomy from `<SHARED_DIR>/references/bugfix-patterns.md`. If there is a triage-agent report, start from its Rationale, then confirm it against the check code. If they disagree, trust the code:
 
 | Root Cause | Likely Fix Strategy |
 |------------|-------------------|
@@ -92,14 +106,14 @@ Rate as **easy**, **medium**, or **hard**:
 After filtering, present **exactly 10** issues to the user in a table format:
 
 ```
-| # | Issue | Check | Problem | Root Cause | Fix Strategy | Difficulty |
-|---|-------|-------|---------|-----------|-------------|-----------|
-| 1 | #XXXXX title | `check-name` | one-line description | category | strategy | easy/medium |
+| # | Issue | Check | Problem | Root Cause | Fix Strategy | Difficulty | Godbolt |
+|---|-------|-------|---------|-----------|-------------|-----------|---------|
+| 1 | #XXXXX title | `check-name` | one-line description | category | strategy | easy/medium | link or N/A |
 ```
 
 For each issue, also include a **2-3 sentence analysis** below the table:
 
-> **#XXXXX**: The check warns on `<pattern>` because `<root cause>`. Fix: `<strategy>`. The check has no existing option for this case. Discussion mentions `<any useful hints>`.
+> **#XXXXX**: The check warns on `<pattern>` because `<root cause>`. Fix: `<strategy>`. The check has no existing option for this case. Discussion mentions `<any useful hints>`. Triage-agent: `<verdict>` on `<analysed date>`, or no report. Say so if your root cause differs from its Rationale.
 
 ### Disqualified Issues
 
@@ -109,6 +123,7 @@ After the main table, briefly list issues you examined but disqualified, with th
 - `#XXXXX` -- requires fundamental redesign of check
 - `#XXXXX` -- no clear reproducer
 - `#XXXXX` -- assigned to @username
+- `#XXXXX` -- triage-agent could not reproduce it on YYYY-MM-DD
 
 This helps the user understand your filtering and catch any mistakes.
 
@@ -123,9 +138,9 @@ The file should contain everything from Step 3 in proper markdown format:
 
 ## Fixable Issues (10)
 
-| # | Issue | Check | Problem | Root Cause | Fix Strategy | Difficulty |
-|---|-------|-------|---------|-----------|-------------|-----------|
-| 1 | [#XXXXX](url) title | `check-name` | ... | ... | ... | easy |
+| # | Issue | Check | Problem | Root Cause | Fix Strategy | Difficulty | Godbolt |
+|---|-------|-------|---------|-----------|-------------|-----------|---------|
+| 1 | [#XXXXX](url) title | `check-name` | ... | ... | ... | easy | [link](url) |
 ...
 
 ### Detailed Analysis
@@ -133,6 +148,8 @@ The file should contain everything from Step 3 in proper markdown format:
 #### 1. #XXXXX — title
 - **Check**: `check-name`
 - **Reproducer**: (brief description or code snippet)
+- **Godbolt**: https://godbolt.org/z/XXXXXXXXX, with its compiler flags (or N/A)
+- **Triage-agent report**: [#NNN](url), `<verdict>`, analysed YYYY-MM-DD (or none)
 - **Root cause**: ...
 - **Fix strategy**: ...
 - **Difficulty**: easy/medium
@@ -163,3 +180,5 @@ Print both paths.
 - **Be honest about difficulty**. If something looks hard, say so. Don't inflate the list with dubious candidates.
 - **Parallelize**. Use Agent subagents to analyze multiple issues concurrently. This skill is research-heavy.
 - **Check options first**. The #1 mistake is treating "by design" behavior as a bug.
+- **Verify triage-agent reports**. They are machine-generated hints that can be wrong or stale. Confirm them against the check code and your own build.
+- **Never write to `clang-tidy-infra/triage-agent`**. No comments, no closing, no `/redo`. If a report looks wrong or stale, tell the user.

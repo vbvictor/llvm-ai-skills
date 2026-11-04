@@ -12,9 +12,13 @@ You are an expert LLVM/clang-tidy contributor. Your job is to find an open false
 
 ## Configuration
 
+- **Shared files**: `<SHARED_DIR>` is the `_shared` directory next to this skill's directory (`<this skill's directory>/../_shared`)
+
 ## Step 0: Read Reference Material
 
-Read `references/bugfix-patterns.md` to load the taxonomy of root causes, fix strategies, test patterns, and conventions. This is critical context for every step below.
+Read `<SHARED_DIR>/references/bugfix-patterns.md` to load the taxonomy of root causes, fix strategies, test patterns, and conventions. This is critical context for every step below.
+
+Read `<SHARED_DIR>/references/triage-agent-reports.md` to learn how to use the triage-agent's reports and how far to trust them.
 
 ## Step 1: Find an Issue to Fix
 
@@ -30,6 +34,12 @@ If that yields too few results, also try the `clang-tidy` label alone and filter
 ```bash
 gh issue list -R llvm/llvm-project --label "clang-tidy" --state open \
   --limit 50 --json number,title,updatedAt,url,assignees
+```
+
+Also list the triage-agent's reports. This finds issues the searches above miss, because the bot tags issues that have no `false-positive` label upstream:
+
+```bash
+python3 <SHARED_DIR>/scripts/triage_reports.py list
 ```
 
 ### Verify No One is Working on It
@@ -50,13 +60,14 @@ Also look at the issue's timeline/comments for "I'm working on this" or linked P
 ### Issue Selection Criteria
 
 Filter for issues that:
-1. Have a clear reproducer (C++ code that triggers the false positive)
+1. Have a clear reproducer (C++ code that triggers the false positive, or the Godbolt source in a triage-agent report)
 2. Identify a specific check name (e.g., `bugprone-*`, `readability-*`)
 3. Are **not assigned** and have **no open PR** targeting them
 4. Look feasible based on the bugfix patterns (template handling, matcher exclusion, guard condition, etc.)
 5. Preferably have recent activity (updated in last 6 months)
+6. Preferably have a `Reproduced` triage-agent report
 
-**Skip issues** that require deep dataflow analysis, cross-TU analysis, or fundamental redesign of a check.
+**Skip issues** that require deep dataflow analysis, cross-TU analysis, or fundamental redesign of a check. Also skip issues that the report's verdict rules out, per the table in `<SHARED_DIR>/references/triage-agent-reports.md`.
 
 ### Present Candidates to the User
 
@@ -64,6 +75,7 @@ Filter for issues that:
 - Issue number and title
 - Check name
 - One-line description of the reported false positive
+- Triage-agent verdict and possible problem from its Rationale, if there is a report (use `triage_reports.py show`)
 - Your quick feasibility assessment (easy/medium/hard)
 
 **Then STOP and wait for the user to tell you which one to fix.**
@@ -74,6 +86,7 @@ Read the full issue **including all comments**:
 
 ```bash
 gh issue view <NUMBER> -R llvm/llvm-project --json title,body,comments
+python3 <SHARED_DIR>/scripts/triage_reports.py show <NUMBER>
 ```
 
 Extract:
@@ -81,6 +94,7 @@ Extract:
 - **Reproducer code**: the C++ snippet that triggers the false positive
 - **Expected behavior**: no warning (or different warning)
 - **Actual behavior**: incorrect warning emitted
+- **Possible problem**: the report's Rationale, if there is one, as a hypothesis to verify in Step 7
 
 ### Read the Discussion Carefully
 
@@ -124,12 +138,12 @@ Only proceed to fix if there is **no existing option** that addresses the false 
 
 ## Step 4: Reproduce and Diagnose
 
-Create a minimal reproducer file and run clang-tidy on it:
+Create a minimal reproducer file and run clang-tidy on it. If a triage-agent report has a Godbolt section, start from its source and flags, since that is what actually fired on trunk. Otherwise use the code from the issue.
 
 ```bash
 # Write the reproducer
 cat > /tmp/fp_repro.cpp << 'EOF'
-<reproducer code from the issue>
+<Godbolt source from the report, or reproducer code from the issue>
 EOF
 
 # Run clang-tidy
@@ -137,6 +151,8 @@ EOF
 ```
 
 If no build directory exists, skip this step and work from code analysis alone.
+
+If the report says `Reproduced` but nothing fires on your build, compare the flags first. If it still does not fire, a fix may have landed after the report's analysed date. Tell the user and suggest picking a different issue.
 
 Use `clang -Xclang -ast-dump` to understand the AST structure of the reproducer:
 
@@ -181,7 +197,7 @@ Only proceed once you've confirmed the test failure matches the reported issue (
 
 ## Step 7: Determine Root Cause and Fix Strategy
 
-Based on the analysis, classify the root cause (from `references/bugfix-patterns.md`):
+Based on the analysis, classify the root cause (from `<SHARED_DIR>/references/bugfix-patterns.md`). If a triage-agent report suggested a possible problem, check it against the AST dump and the check's code. If it does not match what you see, drop it:
 
 1. **Template/dependent context** -> Strategy 1 (add `unless(...)`) or Strategy 2 (`TK_IgnoreUnlessSpelledInSource`)
 2. **Macro expansion** -> Strategy 5 (rewrite with raw lexer)
@@ -259,3 +275,5 @@ Print a summary:
 - **Match existing style**. Follow the conventions already used in the check file (Golden Rule).
 - **Don't break existing tests**. Run the full check test suite if possible.
 - **One issue per run**. Fix one issue, then stop.
+- **Verify triage-agent reports**. They are machine-generated hints that can be wrong or stale. Confirm them against the check code and your own build.
+- **Never write to `clang-tidy-infra/triage-agent`**. No comments, no closing, no `/redo`. If a report looks wrong or stale, tell the user.

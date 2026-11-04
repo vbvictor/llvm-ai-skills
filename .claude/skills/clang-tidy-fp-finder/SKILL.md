@@ -21,6 +21,7 @@ correctness gaps. Produces confirmed, executable reproducers — not speculation
 
 ## Assumptions
 
+- `<SHARED_DIR>` is the `_shared` directory next to this skill's directory (`<this skill's directory>/../_shared`).
 - You are running inside an **LLVM git repo**. The repo root will be
   auto-detected (see Phase 1).
 - The build directory is `<llvm-root>/build/`. The binary to use is
@@ -76,6 +77,16 @@ git show <sha> -- clang-tools-extra/clang-tidy/<module>/<CheckFile>.cpp
 ```
 These are gold: past bug fixes reveal the exact shape of fragile logic.
 
+**Read the known reports** for this check. `<SHARED_DIR>/references/triage-agent-reports.md`
+explains how to use them and how far to trust them:
+```bash
+python3 <SHARED_DIR>/scripts/triage_reports.py list \
+  --check <check-name> --tag any --include-closed
+```
+Run `show <NUMBER>` on the rows that look relevant. Issues still open upstream
+are known bugs, so finding them again adds nothing. Closed ones show where the
+logic has been fragile, just like the git history.
+
 **Output of Phase 1:** a structured `CheckProfile` (keep it in your working
 context) with these fields:
 
@@ -91,6 +102,7 @@ CheckProfile:
   fixits: <how fix-its are constructed>
   existing_tests_summary: <what patterns are already tested>
   git_regressions: [list of past fixes that hint at fragile areas]
+  known_reports: [LLVM issue, open or closed upstream, one-line problem]
   std_apis_targeted: [e.g. std::find, std::ranges::find, ...]
 ```
 
@@ -136,7 +148,8 @@ AttackPlan:
 ```
 
 Aim for **5–10 hypotheses**. Prune any that the existing tests already cover
-exactly.
+exactly, or that an open issue in `known_reports` already describes. A variation
+of a known bug is still worth trying.
 
 ---
 
@@ -286,3 +299,5 @@ Then list the path to each `writeup.md` so the user can review immediately.
 - Restore `repro.cpp` to its original state after a `--fix` run (copy before,
   restore after) so subsequent fix-it tests start clean.
 - Git operations are read-only (log, show, diff). Never commit anything.
+- Never write to `clang-tidy-infra/triage-agent`: no comments, no closing, no
+  `/redo`.

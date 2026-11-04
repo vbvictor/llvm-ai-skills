@@ -16,11 +16,14 @@ You are an expert LLVM/clang-tidy contributor. Your job is to read a triage repo
 
 - **LLVM repo**: The user will provide or it defaults to `/home/victor/repos/addon-llvm/llvm-project`
 - **Scripts directory**: Relative to this skill at `scripts/`
+- **Shared files**: `<SHARED_DIR>` is the `_shared` directory next to this skill's directory (`<this skill's directory>/../_shared`)
 - **Tracker file**: `/tmp/clang-tidy-batch-fix-tracker.json` (auto-managed by scripts)
 
 ## Step 0: Read Reference Material
 
-Read `references/bugfix-patterns.md` for root cause taxonomy, fix strategies, test patterns, and conventions.
+Read `<SHARED_DIR>/references/bugfix-patterns.md` for root cause taxonomy, fix strategies, test patterns, and conventions.
+
+Read `<SHARED_DIR>/references/triage-agent-reports.md` to learn how to use the triage-agent's reports and how far to trust them.
 
 ## Step 1: Read the Triage File
 
@@ -39,6 +42,7 @@ Parse the "Detailed Analysis" section to extract for each issue:
 - **Fix strategy**
 - **Difficulty**
 - **URL**
+- **Godbolt** and **Triage-agent report**, which older triage files do not have
 
 Print the list of issues you will attempt and ask the user to confirm before proceeding.
 
@@ -71,6 +75,7 @@ Read the full issue **including all comments**:
 
 ```bash
 gh issue view <NUMBER> -R llvm/llvm-project --json title,body,comments
+python3 <SHARED_DIR>/scripts/triage_reports.py show <NUMBER>
 ```
 
 Extract:
@@ -78,6 +83,7 @@ Extract:
 - **Reproducer code**: the C++ snippet that triggers the false positive
 - **Expected behavior**: no warning (or different warning)
 - **Actual behavior**: incorrect warning emitted
+- **Possible problem**: the report's Rationale, if there is one, as a hypothesis to verify in Step 3.7
 
 ### Read the Discussion Carefully
 
@@ -121,12 +127,12 @@ Only proceed to fix if there is **no existing option** that addresses the false 
 
 ### Step 3.4: Reproduce and Diagnose
 
-Create a minimal reproducer file and run clang-tidy on it:
+Create a minimal reproducer file and run clang-tidy on it. If a triage-agent report has a Godbolt section, start from its source and flags, since that is what actually fired on trunk. Otherwise use the code from the issue.
 
 ```bash
 # Write the reproducer
 cat > /tmp/fp_repro.cpp << 'EOF'
-<reproducer code from the issue>
+<Godbolt source from the report, or reproducer code from the issue>
 EOF
 
 # Run clang-tidy
@@ -134,6 +140,8 @@ EOF
 ```
 
 If no build directory exists, skip this step and work from code analysis alone.
+
+If the report says `Reproduced` but nothing fires on your build, compare the flags first. If it still does not fire, a fix may have landed after the report's analysed date. Finish the branch with `--status skipped` and say so in the summary.
 
 Use `clang -Xclang -ast-dump` to understand the AST structure of the reproducer:
 
@@ -178,7 +186,7 @@ Only proceed once you've confirmed the test failure matches the reported issue (
 
 ### Step 3.7: Determine Root Cause and Fix Strategy
 
-Based on the analysis, classify the root cause (from `references/bugfix-patterns.md`):
+Based on the analysis, classify the root cause (from `<SHARED_DIR>/references/bugfix-patterns.md`). If a triage-agent report suggested a possible problem, check it against the AST dump and the check's code. If it does not match what you see, drop it:
 
 1. **Template/dependent context** -> Strategy 1 (add `unless(...)`) or Strategy 2 (`TK_IgnoreUnlessSpelledInSource`)
 2. **Macro expansion** -> Strategy 5 (rewrite with raw lexer)
@@ -298,3 +306,5 @@ Print the full report contents to the user and both file paths.
 - **Minimal changes only**. Don't refactor, don't add comments to unchanged code.
 - **Always update release notes** for successful fixes.
 - **clang-format source, not tests**. Run clang-format only on check `.cpp`/`.h` files.
+- **Verify triage-agent reports**. They are machine-generated hints that can be wrong or stale. Confirm them against the check code and your own build.
+- **Never write to `clang-tidy-infra/triage-agent`**. No comments, no closing, no `/redo`. If a report looks wrong or stale, tell the user.
